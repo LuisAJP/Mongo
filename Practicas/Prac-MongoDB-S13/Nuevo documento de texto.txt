@@ -1,0 +1,166 @@
+
+https://www.youtube.com/watch?v=zmXl2dOGWL8
+
+APARTADO 6.- Trabajando con la colección aficiones en MongoDB: Actualizaciones
+
+b.1) MotoGP: cambiar el atributo NombreEquipo por Nombre (sin perder sus valores)
+db.aficiones.update( { Tema: "MotoGP" },{ $rename:{ NombreEquipo: "Nombre" } },{ multi: true } )
+
+b.2) Precio: En Futbol y Baloncesto hay valores exagerados: quitar ceros hasta dejar cifras de tres dígitos.
+
+db.aficiones.find().forEach(
+	function (doc) {
+	if (doc.Tema == "Fútbol" || doc.Tema=="Baloncesto" ){
+		while(doc.Precio > 1000) 
+			doc.Precio= doc.Precio / 10;
+	}
+	db.aficiones.update( { _id: doc._id } , doc );
+});
+
+
+b.3) Añadir el precio a MotoGP y Ajedrez con valor fijo de 100 (en un solo update)
+
+db.aficiones.update( { $or: [ { Tema: "MotoGP" } , { Tema: "Ajedrez" } ] } , { $set: { Precio: 100 } } , { multi: true } )
+
+b.4) En MotoGP: Atributo incorrecto: hay "Puntuacón" donde debería haber "Puntuacion" sin perder su valor
+
+db.aficiones.update( { Tema: "MotoGP" } , { $rename: { Puntuacón: "Puntuacion" } } , { multi: true } )
+
+b.5) (sacar nota) En Ajedrez : unir los valores de Nombre y Apellidos en el atributo Nombre. Quitar el atributo
+Apellidos.
+
+db.aficiones.find().forEach(
+	function(doc) {
+		var cadena;
+		if (doc.Tema == "Ajedrez"){
+			if(doc.Apellidos != null){
+			cadena =doc.Nombre + " " + doc.Apellidos;
+			db.aficiones.update( { _id: doc._id } , { $unset: { Apellidos: "" } } );
+			db.aficiones.update( { _id: doc._id } , { $set: { Nombre: cadena } } );	
+			}
+		}
+	}
+)
+
+c) Esos errores son ocasionados porque la colección no tenía un validador automático. Crea una colección misAficiones
+solo para tu Tema (afición) y define el validador adecuado siguiendo las pautas del método en validar-con-Schema.js de la
+carpeta /ejemplosMongodb-en-Teoria/ . Inserta en misAficiones los documentos de tu tema que están en colección
+aficiones (puedes hacerlo copiándolos e insertándolos con la opción del menú insert). Deben superar la validación para
+que se inserten.
+Nota: ver otro ejemplo del $jsonSchema en https://docs.mongodb.com/manual/core/schema-validation/
+
+db.createCollection("misAficiones", {
+   validator: {
+      $jsonSchema: {
+         bsonType: "object",
+         required: [ "Tema", "Nombre"],
+         properties: {
+            Tema: {
+               bsonType: "string",
+               description: "nombre del tema de aficiones"
+            },
+            Nombre: {
+               bsonType: "string",
+               description: "nombre del objeto"
+            },
+		    Puntuacion: {
+			   bsonType: [ "double" ],
+			    minimum: 0.0,
+               maximum: 10.0,
+               description: "puntuacion del objeto"
+            },
+			 Precio: {
+               bsonType: [ "double" ],
+               description: "precio del objeto"
+            },
+		    Autor: {
+               bsonType: "string",
+               description: "nombre del autor del objeto"
+            },
+			Fecha: {
+               bsonType: "string",
+               description: "fecha de creación del objeto"
+            },
+			  Periodo: {
+               bsonType: "string",
+               description: "periodo del objeto"
+            }
+         }
+      }
+   }
+})
+
+db.misAficiones.insert(
+   {
+    "Tema" : "Arte",
+    "Nombre" : "La noche estrellada",
+    "Puntuacion" : 7,
+    "Precio" : 70.0,
+	"Autor" : "Vincent Van gogh",
+    "Fecha" : "1889",
+    "Periodo" : "Posimpresionismo"
+   }
+ )
+
+
+
+
+
+d) Queremos evitar repeticiones de datos, ej.: tener el mismo libro repetido para todos los que les guste. Para ello
+queremos normalizar aficiones para tener una colección solodatos con la lista de detalles de las aficiones. Además, para no
+estropear aficiones, crea otra colección soloaficiones con lo que debe quedar en aficiones después de normalizarla:
+quedarán los atributos más frecuentes en las consultas: los Campos Obligatorios del enunciado, y el identificador del
+nuevo objeto con los detalles en solodatos.
+
+
+db.createCollection("soloDatos")
+db.createCollection("soloAficiones")
+
+db.aficiones.aggregate( 
+{ $project: { Componentes: "$$ROOT" , detalles: "$$ROOT" } } ,
+{ $project: { Componentes: { Tema: 1, Apodo: 1, Nombre: 1, Puntuacion: 1, Precio: 1, identificador: "$_id" } , detalles: "$$ROOT.detalles" } } ,
+{ $project: { _id: 0, detalles: { Tema: 0, Apodo: 0, Nombre: 0, Puntuacion: 0, Precio: 0 } } }
+).forEach(  
+	function(doc) {
+		db.soloDatos.insert(doc.detalles);
+		db.soloAficiones.insert(doc.Componentes);
+	}
+)
+
+
+db.aficiones.find().forEach(
+	function(doc) {
+		db.soloDatos.insert({doc.});
+		db.soloAficiones.insert({Tema:doc.Tema,Apodo: doc.Apodo, Nombre:doc.Nombre,Puntuacion:doc.Puntuacion, Precio:doc.Precio, identificador: doc._id});
+		
+	}
+)
+
+
+var prueba=db.aficiones.aggregate( [ { $project: {  _id:0,Tema: 0, Apodo: 0, Nombre: 0, Puntuacion: 0, Precio: 0  } }  ]);
+db.soloDatos.insert(prueba);
+
+e) El efecto del apartado anterior es que ahora la consulta completa uniendo ambas colecciones es más compleja y más
+lenta. Cómo se hace?
+
+db.soloAficiones.aggregate( [{ $lookup: { from: "soloDatos" , localField: "identificador" , foreignField: "_id" , as: "detalles" } }] )
+
+f) (para nota) Crea una colección resconstruida que sea el resultado de la unión de solodatos y soloaficiones (el
+resultado del apartado anterior)
+
+db.createCollection("reconstruida")
+
+db.soloAficiones.aggregate([ { $lookup: { from:"soloDatos", localField:"identificador", foreignField:"_id", as:"detalles" } } , { $out: "reconstruida" } ])
+
+APARTADO 5.- (REVISAR el de la semana pasada con lo explicado en clase de Teoría)
+Siguiendo las pautas para diseñar una BD no-sql en las diapositivas de la Teoría: diseña tú una BD de tema libre y describe qué
+operaciones quiere hacer. Teniendo en cuenta que sea un tema donde una BD tipo SQL no sea adecuada.
+
+
+
+APARTADO 5.- EXTRA (REVISAR el de la semana pasada con lo explicado en clase de Teoría)
+Deseamos introducir elementos compuestos, ej.: como en un equipo de futbol si incluimos cada jugador con sus datos
+personales. Y queremos hacer muchas consultas sobre esos elementos compuestos ej.: datos personales. ¿Conviene normalizar
+o desnormalizar?. ¿Cómo debería quedar la representación de la colección?
+
+

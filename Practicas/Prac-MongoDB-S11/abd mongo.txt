@@ -1,0 +1,119 @@
+
+
+
+{Tema:"Arte",Apodo:"Luis",Nombre:"La noche estrellada",Puntuacion:"7",Precio:"70",Autor:"Vincent Van gogh", Fecha:"1889",Periodo:"Posimpresionismo"}
+{Tema:"Arte",Apodo:"Luis",Nombre:"El beso",Puntuacion:"6",Precio:"65",Autor:"Gustav Klimt", Fecha:"1908",Periodo:"Simbolismo"}
+{Tema:"Arte",Apodo:"Luis",Nombre:"El jardin de las delicias",Puntuacion:"5",Precio:"35",Autor:"El Bosco", Fecha:"1504",Periodo:"Renacimiento nórdico"}
+{Tema:"Arte",Apodo:"Luis",Nombre:"La persistencia de la memoria",Puntuacion:"7",Precio:"55",Autor:"Salvador Dali", Fecha:"1931",Periodo:"Surrealismo"}
+{Tema:"Arte",Apodo:"Luis",Nombre:"La gran ola de Kanagawa",Puntuacion:"8",Precio:"92",Autor:"Katsushika Hokusai", Fecha:"1830",Periodo:"Ukiyo-e"}
+{Tema:"Arte",Apodo:"Luis",Nombre:"El hijo del hombre",Puntuacion:"7",Precio:"75",Autor:"René Magritte", Fecha:"1964",Periodo:"Surrealismo"}
+{Tema:"Arte",Apodo:"Luis",Nombre:"El 3 de mayo en Madrid",Puntuacion:"7",Precio:"65",Autor:"Francisco de Goya", Fecha:"1814",Periodo:"Romanticismo"}
+{Tema:"Arte",Apodo:"Luis",Nombre:"El caminante sobre el mar de nubes",Puntuacion:"5",Precio:"45",Autor:"Caspar David Friedrich", Fecha:"1818",Periodo:"Romanticismo"}
+{Tema:"Arte",Apodo:"Luis",Nombre:"Venus del espejo",Puntuacion:"6",Precio:"45",Autor:"Diego Velázquez", Fecha:"1647",Periodo:"Barroco"}
+{Tema:"Arte",Apodo:"Luis",Nombre:"La tentación de San Antonio",Puntuacion:"8",Precio:"85",Autor:"Salvador Dalí", Fecha:"1946",Periodo:"Surrealismo"}
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+OPERADORES
+$lt menor
+Es el equivalente a menor que y nos va a traer todos los documentos cuya propiedad sea menor que la condición, se excluyen todos los que coincidan con el valor exacto.
+
+$lte menor e igual
+Funciona igual que la comparación anterior, pero esta vez sí incluye los documentos que sean iguales al valor de la comparación.
+
+$gt mayor
+Funciona exactamente igual que la primera condición, únicamente que evaluará los valores mayores en la consulta.
+
+$gte mayor igual
+Al igual que $lte evaluará todas las condiciones mayores y también incluirá el valor que se utiliza como medición.
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+link:http://www.diegocalvo.es/busquedas-en-mongodb/
+
+cambiar base datos 
+use pracmongo
+
+
+db.getCollection('aficiones').find({})
+//Muestra todos cuando la fecha sea menor a 1900
+db.aficiones.find({"Fecha":{"$lt":"1900"}});
+//mostar en array todas las otras que tenga de tema Arte
+db.aficiones.find({Tema:"Arte"}).toArray();
+db.aficiones.find({},{Puntuacion:8}).toArray()
+
+CONSULTAS
+
+//Muestra de todos los documentos cuyo apodo es  “lujarami”
+db.aficiones.find({Apodo:"lujarami"})
+
+//Muestra Nombre, autor y la puntuacion de los documentos cuyo apodo es lujarami
+db.aficiones.findOne({Apodo:"lujarami"},{Nombre:1, Autor:2,Puntuacion:3})
+
+//Mostrar nombre y el autor de las obras cuyas fechas sea mayores a 1900
+db.aficiones.find({"Fecha": {$gt: "1900"}},{Nombre:1, Autor:2});
+
+//Mostrar Apodo, nombre, fecha y precio cuyas obras tienen de apodo lujarami, precio inferior a 70 y fecha de creacion menor a 1900
+db.aficiones.find(
+  { 
+    $and: 
+      [ 
+		{Apodo: "lujarami" },
+		{Fecha: {$lt:"1900"}}, 
+		{Precio: {$lt:70}}
+      ] 
+  }
+  ,{Apodo:1,Nombre:2,Fecha:3,Precio:4}
+);
+
+
+
+//Mostrar nombre, precio y la puntuación de las obras que tenga un precio mayor que 30 y menor que 70 y tenga de puntuación 7
+db.aficiones.find(
+  { 
+    $and: 
+      [ 
+		{Apodo: "lujarami" },
+        {Precio: {$gt:"30","$lt":"70"}}, 
+        {Puntuacion: "7" } 
+      ] 
+  }
+  ,{Nombre:1,Precio:2,Puntuacion:3}
+);
+
+
+//Mostrar todos los documentos cuyo campo nombre acabe en e
+db.aficiones.find({"Nombre": {$regex:".*a$"}},{Nombre:1})
+
+
+//Mostrar el nombre de las obras que acaben en e
+db.aficiones.find(
+	{
+		$and: 
+		[
+		 {Apodo: "lujarami" },
+		{"Nombre": {$regex:".*e$"}}
+		]
+
+	}
+    ,{Nombre:1}
+);
+
+
+
+
+//otras cosas
+imprimir nombre todas las filas
+db.aficiones.find().forEach(
+	function (miDocumento) {
+	print("NombreTema: " + miDocumento.Tema);
+	
+});
+
+
+
+
+
+db.aficiones.aggregate([
+	
+		{ $project: { _id: "$Tema"} },
+		{$sort: { _id:1}}
+		]);
+		
+		

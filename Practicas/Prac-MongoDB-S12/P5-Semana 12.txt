@@ -1,0 +1,373 @@
+a) Consultas: (componente es cada documento de la BD)
+1. Obtener el nombre, el tema y la puntuación de los componentes mejor valorados (puntuaciones > = 9)
+pero no saques el identificador.
+
+db.aficiones.find({"Puntuacion" :{$gte:9}},{ _id:0,"Tema":1,"Nombre":2,"Puntuacion":3});
+
+2. Obtener para cada tema (agrupado): su nombre, el total de cuanto te gastarías si vas a todos los
+componentes mejor valorados y cuántos componentes has incluido.
+
+
+db.aficiones.aggregate([
+		{ $match: { "Puntuacion":{$gte:9} } },
+		{ $group: { _id: "$Tema",totalGasto: { $sum: "$Precio" },totalComponentes: { $sum: 1 } } },
+		{$sort: { _id:1}}
+		]);
+
+3. para cada una de las puntuaciones (10,9,8,7,6 y 5) por separado: Para cada puntuación, obtener los
+nombres de componentes que la tienen. (cuando ya funcione, incluye también el nombre su tema)
+
+
+
+db.aficiones.aggregate(
+{$match :{ $or :[
+				{Puntuacion : {$eq : 5}},
+				{Puntuacion : {$eq : 6}},
+				{Puntuacion : {$eq : 7}},
+				{Puntuacion : {$eq : 8}},
+				{Puntuacion : {$eq : 9}},
+				{Puntuacion : {$eq : 10}},
+				]
+		}
+},
+{$group : { _id : "$Puntuacion", Nombres : {$push : "$Tema"} }},
+{$sort: { _id:-1}}
+);
+
+
+4. Lista de Apodos para cada afición (Tema)
+
+db.aficiones.aggregate(
+[
+{$group : { _id : "$Tema", Apodos_Aficion: {$addToSet : "$Apodo"} }},
+{$sort: { _id:1}}
+]
+);
+
+------------------------------------------------------------------------------
+b) (para nota) A quien le gusta los mismos componentes?: Queremos obtener para cada Tema: Apodo, Nombre y Tema
+de los componentes (que tengan apodo distinto) en los que coincide al menos un nombre del mismo Tema.
+
+
+db.aficiones.aggregate(
+	[
+	{"$group" : {"_id": "$Nombre", "Apodos": {"$addToSet": "$Apodo"}, "Temas": {"$first": "$Tema"}, "count": {"$sum": 1}}}, 
+	{"$match": {"count": {"$gte": 2}}}
+	]
+);
+
+
+
+
+c) (para nota) Repite la búsqueda anterior para puntuaciones intermedias: más de 4 y menos de 9. Muestra la puntuación
+también.
+
+db.aficiones.aggregate(
+					[
+					{"$match": {"$and": [{Puntuacion: {"$gt":4}}, {Puntuacion: {"$lt":9}}]}}, 
+					{"$group" : {"_id": "$Nombre","Puntuacion": {"$first": "$Puntuacion"} ,"apodos": {"$addToSet": "$Apodo"}, "temas": {"$first": "$Tema"}, "count": {"$sum": 1}}}, 
+					{"$match": {"count": {"$gte": 2}}}
+					]);
+
+
+
+d) Describe al menos cuatro consultas interesantes para tí, descríbela primero el texto y luego su código y ejecútalas.
+
+
+Consulta1
+db.aficiones.aggregate([
+		{ $match: { "Precio":{$lte:50} } },
+		{ $project: { _id: "$Nombre",Precio:"$Precio"} },
+		{$sort: { _id:1}}
+		]);
+
+Consulta2
+db.aficiones.find(
+	{
+		$and: 
+		[
+		 {Apodo: "lujarami" },
+		{"Nombre": {$regex:".*e$"}}
+		]
+
+	}
+    ,{Nombre:1}
+);
+
+Consulta3
+
+
+db.aficiones.find({"Tema": "Rugby" ,"Puntuacion" : {$exists: true}, $where : "this.Puntuacion <= 4"}).pretty();
+
+Consulta4
+
+db.aficiones.find({"Tema": "Rugby" ,"Puntuacion" : {$exists: true}, $where : "this.Puntuacion <= 4"}).explain("executionStats");
+
+
+
+
+e) Obtener todos los componentes de tu colección clasificados por tema.
+
+e.1) Queremos imprimir una línea para cada documento de este modo:
+TEMA: <su nombre> - NombreDoc: <del documento>.
+Usa un cursor que llama a una función sin nombre (definida dentro del cursor). Esa función imprime cada línea.
+
+db.aficiones.aggregate( [
+{ $group: {_id: { tema: "$Tema" },Documentos: { $addToSet : "$Nombre" }}}]);
+
+
+e.2) Agrupa con aggregate para obtener un documento con el nombre de cada tema y una lista de nombres de sus
+documentos, además de cuántos documentos son.
+
+
+
+db.aficiones.aggregate( [
+{ $group: {_id: { tema: "$Tema" },NumeroDocumentos: { $sum: 1 },Documentos: { $addToSet : "$Nombre" }}},
+{$sort: { _id:1}} ] ).forEach( function(miDocumento) { printjson(miDocumento);});
+
+
+
+f) Rebaja un 10% al precio de todos los componentes peor valorados (puntuación < 7). Y en la misma actualización
+añades el atributo Descuento a todas las aficiones: su valor no es un porcentaje fijo, sino que se lo asignas tú de
+acuerdo a esta regla: cuanto mayor puntuación, menor % de descuento (inventa la fórmula). Usa forEach y una
+function con save.
+
+
+
+db.aficiones.find().forEach(
+	function (miDocumento) {
+	var aux=0;
+	var descuento = 0;
+	if (miDocumento.Puntuacion < 7 ){
+		descuento = miDocumento.Precio * 0.10;
+		miDocumento.Precio = miDocumento.Precio - descuento;
+	}
+	aux = (1 - miDocumento.Puntuacion/10) * 10 ;
+	miDocumento.Descuento = aux;
+	printjson(miDocumento);
+	db.aficiones.save(miDocumento);
+});
+
+g) (para nota) Queremos tener una colección PorNivel donde vas a crear (cuatro documentos) que representan cuatro
+niveles de calidad calculados, cada uno tendrá un vector con los documentos de aficiones que le correspondan. Sigue
+estos pasos:
+
+1. Crear la colección PorNivel. Cada documento tendrá estos campos:
+NomCal: Nombre del intervalo de calidad : nivel_1, nivel_2, nivel_3 y nivel_4
+Componentes: un array/vector que contenga, como elementos, los componentes (documentos) de la colección
+aficiones que correspondan a ese nivel. Además, cada elemento del array, debe tener un campo con el valor de
+calidad calculado del componente, obtenido multiplicando por 10 la puntuación del componente. Ese campo
+es el valor usado para asignarle un nivel, dentro de estos cuatro intervalos de valores: 0 < = nivel_1 <=30, 30 <
+nivel_2 <=50, 50 < nivel_3 <=70 y 70 < nivel_4.
+
+
+
+
+db.PorNivel.drop();
+db.createCollection("PorNivel");
+db.PorNivel.insert({NomCal: "nivel_1", Componentes: []});
+db.PorNivel.insert({NomCal: "nivel_2", Componentes: []});
+db.PorNivel.insert({NomCal: "nivel_3", Componentes: []});
+db.PorNivel.insert({NomCal: "nivel_4", Componentes: []});
+
+
+
+
+
+
+2. Carga en la colección PorNivel todos los componentes de la colección aficiones que correspondan.
+
+
+
+db.aficiones.find().forEach(
+	function(doc) {
+		var valor=doc.Puntuacion * 10;
+			if (valor <= 30) {
+				db.PorNivel.update(
+					{ NomCal: "nivel_1" },
+					{ $push: { Componentes: { Nombre: doc.Nombre, valorCalidad: valor } } }
+				)
+			}
+		else if (valor <= 50) {
+			db.PorNivel.update(
+				{ NomCal: "nivel_2" },
+				{ $push: { Componentes: { Nombre: doc.Nombre, valorCalidad: valor } } }
+			)
+		}
+		else if (valor <= 70) {
+			db.PorNivel.update(
+				{ NomCal: "nivel_3" },
+				{ $push: { Componentes: { Nombre: doc.Nombre, valorCalidad: valor } } }
+			)
+		}
+		else if (valor <= 100) {
+			db.PorNivel.update(
+				{ NomCal: "nivel_4" },
+				{ $push: { Componentes: { Nombre: doc.Nombre, valorCalidad: valor } } }
+			)
+		}
+	}
+);
+
+
+db.aficiones.find().forEach(
+	function(doc) {
+		var valor=doc.Puntuacion * 10;
+			if (valor <= 30) {
+				db.PorNivel.update(
+					{ NomCal: "nivel_1" },
+					{ $push: { Componentes: { Nombre: doc.Nombre, valorCalidad: valor,Precio: doc.Precio } } }
+				)
+			}
+		else if (valor <= 50) {
+			db.PorNivel.update(
+				{ NomCal: "nivel_2" },
+				{ $push: { Componentes: { Nombre: doc.Nombre, valorCalidad: valor,Precio: doc.Precio } } }
+			)
+		}
+		else if (valor <= 70) {
+			db.PorNivel.update(
+				{ NomCal: "nivel_3" },
+				{ $push: { Componentes: { Nombre: doc.Nombre, valorCalidad: valor,Precio: doc.Precio } } }
+			)
+		}
+		else if (valor <= 100) {
+			db.PorNivel.update(
+				{ NomCal: "nivel_4" },
+				{ $push: { Componentes: { Nombre: doc.Nombre, valorCalidad: valor,Precio: doc.Precio } } }
+			)
+		}
+	}
+);
+
+
+
+3. Imprime el contenido de la colección PorNivel formateado, poniendo una línea de guiones entre cada nivel.
+
+db.PorNivel.find().forEach(
+	function (doc) {
+		for( i = 0; i <  3 ; ++i ) {
+			for( i = 0; i <  doc.Componentes.length ; ++i ) {
+				printjson("Nombre: "+ doc.Componentes[i].Nombre+ " calidad: "+doc.Componentes[i].valorCalidad);
+			}
+			print("-----------------------------------------------------------------------");
+		}
+	}
+);
+
+
+
+
+4. Consulta PorNivel para obtener los 5 elementos más baratos independientemente del nivel al que pertenezcan: su
+nombre, su precio y su NomCal
+
+db.PorNivel.aggregate(
+   [
+   { $project: { _id:0 } } ,
+   {"$unwind": "$Componentes"},
+   { $sort : { "Componentes.Precio" : 1} },
+   { $limit: 5 } 
+   ]
+).pretty()
+
+
+5. Elimina las 2 aficiones más caras de cada intervalo (NomCal). Puedes hacer una operación separada para cada
+intervalo.
+
+
+
+
+var cursor=db.PorNivel.aggregate( 
+{ $unwind: "$Componentes" } ,  
+{ $sort: { "Componentes.Precio":-1 } } , 
+{ $group: { _id : "$_id" , Componentes: { $push: "$Componentes" } } } 
+);
+cursor=next();
+var doc =cursor.next();
+while(cursor.hasNext()){
+	db.PorNivel.update({ },
+	{ $pull: { Componentes:{$in: { [cursor.Componentes] } } }},
+	{multi:true}
+	);
+	
+	doc = cursor.next();
+}
+
+
+
+
+var cursor = null;
+//ordena mayor a menor el precio y me saca 2 documentos
+var cursor=db.PorNivel.aggregate(
+   [
+   {"$unwind": "$Componentes"},
+   { $match: {
+        'NomCal': 'nivel_2'
+    }},
+   { $sort : { "Componentes.Precio" : -1} },
+      { $limit: 2 } 
+   ]
+);
+
+print(cursor);
+
+var doc =cursor.next();
+while(cursor.hasNext()){
+	doc = cursor.next();
+	print(doc);
+}
+
+
+cursor=null;
+
+db.PorNivel.find().forEach(
+	function(doc) {
+		var valor=doc.NomCal;
+		if (valor == "nivel_1") {
+			print(valor);
+			db.PorNivel.update(
+					{ },
+					{ $pull: { Componentes: { Nombre: doc.Nombre, valorCalidad: valor,Precio: doc.Precio } } }
+				)
+			
+		}
+			
+
+			
+		else if (valor == "nivel_2") {
+			print(valor);
+		}
+		else if (valor == "nivel_3") {
+			print(valor);
+		}
+		else if (valor == "nivel_4") {
+			print(valor);
+		}
+		else{print("no encontrado");}
+		
+	}
+);
+
+
+
+
+
+
+APARTADO 4.- Usando Colecciones limitadas (capped)
+Queremos mantener en una colección superGuai, los 5 mejores componentes de la colección Aficiones. Para ello hacemos
+lo siguiente:
+a) Crear dicha colección
+
+db.createCollection("superGuai",{capped:true,size:100000,max:5})
+
+b) Crea las operaciones necesarias para poner los 5 mejores elementos de acuerdo al criterio de calidad explicado en
+el apartado 3.g., no hace falta que hagas el apartado 3.g.: calcula el nivel de calidad y asígna su valor en aficiones
+
+
+c) Inserta un elemento a mano.
+db.superGuai.insert({NomCal: "NivelUno", Componentes: []});
+
+d) Lista todos los componentes para comprobar que mantiene los último cinco introducidos
+db.superGuai.find().pretty()
+
+
